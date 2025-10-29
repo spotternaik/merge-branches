@@ -1,0 +1,46 @@
+name: Merge Branches To Main
+
+on:
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: Comma-separated list of branches to merge
+        required: true
+        default: develop,staging
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Configure Git
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+      - name: Sync main
+        run: |
+          git fetch origin main
+          git reset --hard origin/main
+      - name: Merge branches
+        run: |
+          IFS=',' read -ra branches <<< "${{ github.event.inputs.branches }}"
+          for branch in "${branches[@]}"; do
+            trimmed="$(echo "$branch" | xargs)"
+            if [ -n "$trimmed" ]; then
+              git fetch origin "$trimmed"
+              git merge --no-ff --no-edit "origin/$trimmed"
+            fi
+          done
+      - name: Push
+        run: |
+          if git diff --quiet origin/main..main; then
+            exit 0
+          fi
+          git push origin main
