@@ -7,6 +7,9 @@ on:
         description: Comma-separated list of branches to merge
         required: true
         default: develop,staging
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -28,9 +31,27 @@ jobs:
         run: |
           git fetch origin main
           git reset --hard origin/main
-      - name: Merge branches
+      - name: Determine branches
+        id: determine
+        env:
+          DISPATCH_BRANCHES: ${{ github.event.inputs.branches }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          IFS=',' read -ra branches <<< "${{ github.event.inputs.branches }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "branches=$DISPATCH_BRANCHES" >> "$GITHUB_OUTPUT"
+          else
+            echo "branches=$PR_BRANCH" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Merge branches
+        env:
+          BRANCH_LIST: ${{ steps.determine.outputs.branches }}
+        run: |
+          if [ -z "$BRANCH_LIST" ]; then
+            echo "No branches provided"
+            exit 0
+          fi
+          IFS=',' read -ra branches <<< "$BRANCH_LIST"
           for branch in "${branches[@]}"; do
             trimmed="$(echo "$branch" | xargs)"
             if [ -n "$trimmed" ]; then
